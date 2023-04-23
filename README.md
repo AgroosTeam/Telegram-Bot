@@ -1,2 +1,2 @@
 # Telegram-Bot
-This is a repositiry for a Telegram bot for Park.inc project.
+This is a repository for a Telegram bot for Park.inc project.
