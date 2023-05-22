@@ -1,8 +1,10 @@
 import time
+
+import flask
 import telebot
 from telebot import types
 from key import TOKEN, PAYMENTS_TOKEN
-
+from flask import Flask, request, Response
 
 
 available_time = [['10:00', '11:00'], ['11:00', '12:00'], ['15:00', '16:00'], ['16:00', '17:00']]
@@ -10,6 +12,27 @@ chosen_time = []
 place_number = 0
 
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
+
+@app.route('/', methods=['POST', 'GET'])
+def index():
+    if request.headers.get('content-type') == 'application/json':
+        update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
+        bot.process_new_updates([update])
+        return 'ok'
+    else:
+        flask.abort(403)
+    if request.method == 'POST':
+        return Response('ok', status=200)
+    else:
+        return ' '
+
+
+def main_menu() -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton('Знайти паркомісце', callback_data='find_place'),
+               types.InlineKeyboardButton('Мої замовлення', callback_data='orders'))
+    return markup
 
 
 @bot.message_handler(commands=['start'])
@@ -30,10 +53,7 @@ def help(message):
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
     bot.send_message(message.chat.id, 'Дякую! Контакти отримано', reply_markup=types.ReplyKeyboardRemove())
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(types.InlineKeyboardButton('Знайти паркомісце', callback_data='find_place'),
-               types.InlineKeyboardButton('Мої замовлення', callback_data='orders'))
-    bot.send_message(message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=markup)
+    bot.send_message(message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=main_menu())
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -57,14 +77,9 @@ def inline_buttons(call):
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text='Виберіть час на який ви б хотіли винайняти паркомісце', reply_markup=None)
         bot.send_message(call.message.chat.id, 'Будь ласка, пройдіть оплату')
-        time.sleep(5)
         bot.send_message(call.message.chat.id,
                          'Дякую! Щоб переглянути свої замовлення або відчитини ворота до паркінгу натисніть "Мої замовлення".')
-        time.sleep(2)
-        markup1 = types.InlineKeyboardMarkup(row_width=1)
-        markup1.add(types.InlineKeyboardButton('Знайти паркомісце', callback_data='find_place'),
-                    types.InlineKeyboardButton('Мої замовлення', callback_data='orders'))
-        bot.send_message(call.message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=markup1)
+        bot.send_message(call.message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=main_menu())
     if call.data == 'orders':
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text='Виберіть потрібну вам опцію', reply_markup=None)
@@ -86,10 +101,7 @@ def inline_buttons(call):
         bot.send_message(call.message.chat.id, 'Ворота відчинилися!', reply_markup=markup6)
         time.sleep(3)
     if call.data == 'return':
-        markup5 = types.InlineKeyboardMarkup(row_width=1)
-        markup5.add(types.InlineKeyboardButton('Знайти паркомісце', callback_data='find_place'),
-                    types.InlineKeyboardButton('Мої замовлення', callback_data='orders'))
-        bot.send_message(call.message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=markup5)
+        bot.send_message(call.message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=main_menu())
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text='Повернутися назад', reply_markup=None)
 
@@ -151,4 +163,5 @@ def choose_time(message):
                          prices=list_of_labels)
 
 
-bot.polling(none_stop=True)
+if __name__ == '__main__':
+    app.run()
