@@ -1,12 +1,14 @@
 import time
-
 import flask
 import telebot
+import requests
 from telebot import types
 from key import TOKEN, PAYMENTS_TOKEN
 from flask import Flask, request, Response
+from datetime import datetime
 
 
+base_url = 'http://localhost:8080/'
 available_time = [['10:00', '11:00'], ['11:00', '12:00'], ['15:00', '16:00'], ['16:00', '17:00']]
 chosen_time = []
 place_number = 0
@@ -19,11 +21,11 @@ def index():
     if request.headers.get('content-type') == 'application/json':
         update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
         bot.process_new_updates([update])
-        return 'ok'
+        return 'OK'
     else:
         flask.abort(403)
     if request.method == 'POST':
-        return Response('ok', status=200)
+        return Response('OK', status=200)
     else:
         return ' '
 
@@ -53,6 +55,30 @@ def help(message):
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
     bot.send_message(message.chat.id, 'Дякую! Контакти отримано', reply_markup=types.ReplyKeyboardRemove())
+    requests.post(url=base_url + 'api/user')
+    bot.send_message(message.chat.id, 'Напишіть свою адресу електроннної пошти (email)')
+    bot.register_next_step_handler(message, message.contact.phone_number)
+
+
+def get_email(message, phone_number):
+    bot.send_message(message.chat.id, 'Дякую! Email отримано', reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(message.chat.id, 'Тепер напишіть пароль від вашого акаунту. '
+                                      'Повідомлення, яке ви напишете, буде видалено одразу після його отримання')
+    bot.register_next_step_handler(message, phone_number, message.text)
+
+
+def get_password(message, phone_number, email):
+    print(requests.post(url=base_url + 'api/user',
+                        data={'first_name': message.from_user.first_name,
+                              'middle_name': '',
+                              'last_name': message.from_user.last_name,
+                              'created_at': datetime.timestamp(datetime.now()),
+                              'userByUserId': {'phone_number': phone_number,
+                                               'email': email,
+                                               'password': message.text}
+                              }).text)
+    bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+    bot.send_message(message.chat.id, 'Дякую! Дані отримано!')
     bot.send_message(message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=main_menu())
 
 
@@ -73,13 +99,6 @@ def inline_buttons(call):
         msg = bot.send_message(call.message.chat.id, 'Вже знайшли потрібне місце? Напишіть його номер')
         bot.register_next_step_handler(msg, choose_place)
 
-    if call.data == 'that':
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
-                              text='Виберіть час на який ви б хотіли винайняти паркомісце', reply_markup=None)
-        bot.send_message(call.message.chat.id, 'Будь ласка, пройдіть оплату')
-        bot.send_message(call.message.chat.id,
-                         'Дякую! Щоб переглянути свої замовлення або відчитини ворота до паркінгу натисніть "Мої замовлення".')
-        bot.send_message(call.message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=main_menu())
     if call.data == 'orders':
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text='Виберіть потрібну вам опцію', reply_markup=None)
@@ -93,6 +112,7 @@ def inline_buttons(call):
             markup3.add(types.InlineKeyboardButton('Відкрити ворота', callback_data='open_gates'),
                         types.InlineKeyboardButton('Повернутися назад', callback_data='return'))
             bot.send_message(call.message.chat.id, f'Паркомісце {place_number}', reply_markup=markup3)
+
     if call.data == 'open_gates':
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text=f'Паркомісце {place_number}')
@@ -100,6 +120,7 @@ def inline_buttons(call):
         markup6.add(types.InlineKeyboardButton('Повернутися назад', callback_data='return'))
         bot.send_message(call.message.chat.id, 'Ворота відчинилися!', reply_markup=markup6)
         time.sleep(3)
+
     if call.data == 'return':
         bot.send_message(call.message.chat.id, 'Виберіть потрібну вам опцію', reply_markup=main_menu())
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
